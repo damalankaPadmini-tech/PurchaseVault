@@ -1,9 +1,12 @@
-# [Project name]
+# PurchaseVault
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+PurchaseVault keeps purchase details, warranty timelines, and return deadlines organized in a personal browser-based vault.
 
 ## Run & Operate
 
+- Run the `artifacts/purchase-vault: web` workflow to open the app preview.
+- `pnpm --filter @workspace/purchase-vault run typecheck` — check the app package.
+- `PORT=5174 BASE_PATH=/ pnpm --filter @workspace/purchase-vault run build` — build the web app.
 - `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
@@ -26,15 +29,17 @@ _Populate as you build — short repo map plus pointers to the source-of-truth f
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- The first milestone is frontend-only: purchase records persist in browser `localStorage`; no account sync or server storage is active.
+- Keep backend, authentication, uploads, OCR, and notifications deferred until the user moves beyond the first milestone.
+- Use JavaScript/JSX for the PurchaseVault frontend, as requested; keep the code approachable for a beginner.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+Users can add, edit, search, filter, view, and delete purchase records; track calculated warranty and return-window dates; and prepare for a warranty conversation using the details they saved. Sample data is provided for the initial experience.
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- The user is a beginner and wants the app built step by step with easy-to-understand code.
 
 ## Gotchas
 

@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "PurchaseVault"
+description = "A personal purchase lifecycle and warranty tracker for organizing products, monitoring warranty and return deadlines, and keeping ownership details in one place."
+version = "1.0.0"
+id = "artifacts/purchase-vault"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 22679
+
+[services.development]
+run = "pnpm --filter @workspace/purchase-vault run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/purchase-vault", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/purchase-vault/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "22679"
+BASE_PATH = "/"
