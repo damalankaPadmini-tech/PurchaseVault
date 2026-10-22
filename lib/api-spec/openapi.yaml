@@ -3,13 +3,25 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: PurchaseVault API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Account and session operations
+  - name: purchases
+    description: User-owned purchase records and warranty summaries
+  - name: documents
+    description: Purchase document metadata
+  - name: services
+    description: Purchase service history
+  - name: notifications
+    description: Upcoming warranty and return deadlines
+  - name: dashboard
+    description: Purchase dashboard summaries
 paths:
   /healthz:
     get:
@@ -24,7 +36,546 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /auth/register:
+    post:
+      operationId: registerAuth
+      tags: [auth]
+      summary: Create an account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AuthRegisterInput"
+      responses:
+        "201":
+          description: Account created and signed in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /auth/login:
+    post:
+      operationId: loginAuth
+      tags: [auth]
+      summary: Sign in
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AuthLoginInput"
+      responses:
+        "200":
+          description: Signed in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /auth/logout:
+    post:
+      operationId: logoutAuth
+      tags: [auth]
+      summary: Sign out
+      responses:
+        "204":
+          description: Session cookie cleared
+  /auth/me:
+    get:
+      operationId: getCurrentUser
+      tags: [auth]
+      summary: Get the signed-in account
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: Current account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /dashboard/summary:
+    get:
+      operationId: getDashboardSummary
+      tags: [dashboard]
+      summary: Get purchase totals and upcoming deadlines
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: Dashboard totals
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /purchases:
+    get:
+      operationId: getPurchases
+      tags: [purchases]
+      summary: List the signed-in user's purchases
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, default: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+        - in: query
+          name: search
+          schema: { type: string, maxLength: 120 }
+        - in: query
+          name: category
+          schema: { type: string, maxLength: 80 }
+        - in: query
+          name: warrantyStatus
+          schema: { type: string, enum: [active, expiringSoon, expired] }
+        - in: query
+          name: sort
+          schema: { type: string, enum: [purchaseDateDesc, purchaseDateAsc, priceAsc, priceDesc, nameAsc], default: purchaseDateDesc }
+      responses:
+        "200":
+          description: Purchase records and pagination
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PurchaseListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      operationId: createPurchase
+      tags: [purchases]
+      summary: Create a purchase
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PurchaseInput"
+      responses:
+        "201":
+          description: Purchase created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Purchase"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /purchases/{purchaseId}:
+    parameters:
+      - $ref: "#/components/parameters/PurchaseId"
+    get:
+      operationId: getPurchase
+      tags: [purchases]
+      summary: Get a purchase
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: Purchase record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Purchase"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      operationId: updatePurchase
+      tags: [purchases]
+      summary: Update a purchase
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PurchaseUpdate"
+      responses:
+        "200":
+          description: Updated purchase
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Purchase"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deletePurchase
+      tags: [purchases]
+      summary: Delete a purchase and its associated metadata
+      security:
+        - sessionCookie: []
+      responses:
+        "204":
+          description: Purchase and associated records deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /purchases/{purchaseId}/claim-summary:
+    parameters:
+      - $ref: "#/components/parameters/PurchaseId"
+    get:
+      operationId: getPurchaseClaimSummary
+      tags: [purchases]
+      summary: Get purchase details for warranty claim preparation
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: Purchase details and related metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClaimSummary"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /purchases/{purchaseId}/documents:
+    parameters:
+      - $ref: "#/components/parameters/PurchaseId"
+    get:
+      operationId: getPurchaseDocuments
+      tags: [documents]
+      summary: List document metadata for a purchase
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: Document metadata
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Document"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      operationId: createPurchaseDocument
+      tags: [documents]
+      summary: Add document metadata to a purchase
+      description: Does not upload or store file bytes.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DocumentInput"
+      responses:
+        "201":
+          description: Document metadata created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Document"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /documents/{documentId}:
+    parameters:
+      - $ref: "#/components/parameters/DocumentId"
+    get:
+      operationId: getDocument
+      tags: [documents]
+      summary: Get document metadata
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: Document metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Document"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      operationId: updateDocument
+      tags: [documents]
+      summary: Update document metadata
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DocumentUpdate"
+      responses:
+        "200":
+          description: Updated document metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Document"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deleteDocument
+      tags: [documents]
+      summary: Delete document metadata
+      security:
+        - sessionCookie: []
+      responses:
+        "204":
+          description: Document metadata deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /purchases/{purchaseId}/services:
+    parameters:
+      - $ref: "#/components/parameters/PurchaseId"
+    get:
+      operationId: getPurchaseServiceRecords
+      tags: [services]
+      summary: List service history for a purchase
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: Service records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ServiceRecord"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      operationId: createPurchaseServiceRecord
+      tags: [services]
+      summary: Add a service record
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ServiceRecordInput"
+      responses:
+        "201":
+          description: Service record created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceRecord"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /purchases/{purchaseId}/services/{serviceId}:
+    parameters:
+      - $ref: "#/components/parameters/PurchaseId"
+      - $ref: "#/components/parameters/ServiceId"
+    get:
+      operationId: getPurchaseServiceRecord
+      tags: [services]
+      summary: Get a service record
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: Service record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceRecord"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      operationId: updatePurchaseServiceRecord
+      tags: [services]
+      summary: Update a service record
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ServiceRecordUpdate"
+      responses:
+        "200":
+          description: Updated service record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceRecord"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deletePurchaseServiceRecord
+      tags: [services]
+      summary: Delete a service record
+      security:
+        - sessionCookie: []
+      responses:
+        "204":
+          description: Service record deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /notifications:
+    get:
+      operationId: getNotifications
+      tags: [notifications]
+      summary: List notifications and create any missing upcoming reminders
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: Notifications for the signed-in user
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Notification"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /notifications/upcoming:
+    get:
+      operationId: getUpcomingDeadlines
+      tags: [notifications]
+      summary: Get upcoming warranty and return deadlines
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: Upcoming deadline summaries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/UpcomingDeadline"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /notifications/{notificationId}/read:
+    parameters:
+      - $ref: "#/components/parameters/NotificationId"
+    patch:
+      operationId: markNotificationRead
+      tags: [notifications]
+      summary: Mark a notification as read
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: Updated notification
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Notification"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
 components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: pv_auth
+  parameters:
+    PurchaseId:
+      in: path
+      name: purchaseId
+      required: true
+      schema: { type: string, pattern: "^[a-f\\d]{24}$" }
+    DocumentId:
+      in: path
+      name: documentId
+      required: true
+      schema: { type: string, pattern: "^[a-f\\d]{24}$" }
+    ServiceId:
+      in: path
+      name: serviceId
+      required: true
+      schema: { type: string, pattern: "^[a-f\\d]{24}$" }
+    NotificationId:
+      in: path
+      name: notificationId
+      required: true
+      schema: { type: string, pattern: "^[a-f\\d]{24}$" }
+  responses:
+    BadRequest:
+      description: Request validation failed
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Unauthorized:
+      description: Authentication is required or has expired
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: The requested user-owned record was not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Conflict:
+      description: A resource conflicts with an existing record
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
   schemas:
     HealthStatus:
       type: object
@@ -33,4 +584,190 @@ components:
           type: string
       required:
         - status
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+      required: [error, message]
+    PublicUser:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        email: { type: string, format: email }
+        createdAt: { type: string }
+      required: [id, name, email, createdAt]
+    AuthRegisterInput:
+      type: object
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        email: { type: string, format: email, maxLength: 254 }
+        password: { type: string, minLength: 8, maxLength: 128 }
+      required: [name, email, password]
+    AuthLoginInput:
+      type: object
+      properties:
+        email: { type: string, format: email, maxLength: 254 }
+        password: { type: string, minLength: 1, maxLength: 128 }
+      required: [email, password]
+    AuthResponse:
+      type: object
+      properties:
+        user:
+          $ref: "#/components/schemas/PublicUser"
+      required: [user]
+    Purchase:
+      type: object
+      properties:
+        id: { type: string }
+        productName: { type: string }
+        brand: { type: string }
+        category: { type: string }
+        price: { type: number, minimum: 0 }
+        currency: { type: string, minLength: 3, maxLength: 3 }
+        purchaseDate: { type: string, pattern: "^\\d{4}-\\d{2}-\\d{2}$" }
+        warrantyMonths: { type: integer, minimum: 0, maximum: 120 }
+        warrantyExpiryDate: { type: string, pattern: "^\\d{4}-\\d{2}-\\d{2}$" }
+        returnDeadline: { type: ["string", "null"], pattern: "^\\d{4}-\\d{2}-\\d{2}$" }
+        serialNumber: { type: string }
+        invoiceNumber: { type: ["string", "null"] }
+        sellerName: { type: ["string", "null"] }
+        notes: { type: ["string", "null"] }
+        warrantyStatus: { type: string, enum: [active, expiringSoon, expired] }
+        returnStatus: { type: string, enum: [none, upcoming, closing, passed] }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+      required: [id, productName, brand, category, price, currency, purchaseDate, warrantyMonths, warrantyExpiryDate, returnDeadline, serialNumber, invoiceNumber, sellerName, notes, warrantyStatus, returnStatus, createdAt, updatedAt]
+    PurchaseInput:
+      type: object
+      properties:
+        productName: { type: string, minLength: 1, maxLength: 160 }
+        brand: { type: string, minLength: 1, maxLength: 120 }
+        category: { type: string, minLength: 1, maxLength: 80 }
+        price: { type: number, minimum: 0, maximum: 100000000 }
+        currency: { type: string, minLength: 3, maxLength: 3, default: USD }
+        purchaseDate: { type: string, pattern: "^\\d{4}-\\d{2}-\\d{2}$" }
+        warrantyMonths: { type: integer, minimum: 0, maximum: 120 }
+        returnDeadline: { type: ["string", "null"], pattern: "^\\d{4}-\\d{2}-\\d{2}$" }
+        serialNumber: { type: string, maxLength: 120 }
+        invoiceNumber: { type: ["string", "null"], maxLength: 120 }
+        sellerName: { type: ["string", "null"], maxLength: 160 }
+        notes: { type: ["string", "null"], maxLength: 2000 }
+      required: [productName, brand, category, price, purchaseDate, warrantyMonths]
+    PurchaseUpdate:
+      allOf:
+        - $ref: "#/components/schemas/PurchaseInput"
+    PurchaseListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Purchase" }
+        pagination:
+          type: object
+          properties:
+            page: { type: integer }
+            limit: { type: integer }
+            totalItems: { type: integer }
+            totalPages: { type: integer }
+          required: [page, limit, totalItems, totalPages]
+      required: [items, pagination]
+    UpcomingDeadline:
+      type: object
+      properties:
+        purchaseId: { type: string }
+        productName: { type: string }
+        brand: { type: string }
+        type: { type: string, enum: [warranty_expiring, return_deadline_approaching, return_deadline_passed] }
+        deadlineDate: { type: string, pattern: "^\\d{4}-\\d{2}-\\d{2}$" }
+        daysRemaining: { type: integer }
+        status: { type: string }
+      required: [purchaseId, productName, brand, type, deadlineDate, daysRemaining, status]
+    DashboardSummary:
+      type: object
+      properties:
+        totalPurchases: { type: integer }
+        activeWarranties: { type: integer }
+        expiringSoon: { type: integer }
+        returnDeadlines: { type: integer }
+        upcoming:
+          type: array
+          items: { $ref: "#/components/schemas/UpcomingDeadline" }
+      required: [totalPurchases, activeWarranties, expiringSoon, returnDeadlines, upcoming]
+    ClaimSummary:
+      type: object
+      properties:
+        purchase: { $ref: "#/components/schemas/Purchase" }
+        documents:
+          type: array
+          items: { $ref: "#/components/schemas/Document" }
+        serviceRecords:
+          type: array
+          items: { $ref: "#/components/schemas/ServiceRecord" }
+      required: [purchase, documents, serviceRecords]
+    Document:
+      type: object
+      properties:
+        id: { type: string }
+        purchaseId: { type: string }
+        documentType: { type: string, enum: [invoice, warranty_card, receipt, service_receipt, other] }
+        originalFilename: { type: string }
+        uploadedAt: { type: string }
+      required: [id, purchaseId, documentType, originalFilename, uploadedAt]
+    DocumentInput:
+      type: object
+      properties:
+        documentType: { type: string, enum: [invoice, warranty_card, receipt, service_receipt, other] }
+        originalFilename: { type: string, minLength: 1, maxLength: 255 }
+        storageKey: { type: ["string", "null"], maxLength: 512 }
+      required: [documentType, originalFilename]
+    DocumentUpdate:
+      type: object
+      properties:
+        documentType: { type: string, enum: [invoice, warranty_card, receipt, service_receipt, other] }
+        originalFilename: { type: string, minLength: 1, maxLength: 255 }
+      minProperties: 1
+    ServiceRecord:
+      type: object
+      properties:
+        id: { type: string }
+        purchaseId: { type: string }
+        serviceDate: { type: string, pattern: "^\\d{4}-\\d{2}-\\d{2}$" }
+        serviceCenter: { type: string }
+        description: { type: string }
+        expense: { type: number, minimum: 0 }
+        currency: { type: string, minLength: 3, maxLength: 3 }
+        status: { type: string, enum: [reported, scheduled, completed, cancelled] }
+        receiptDocumentId: { type: ["string", "null"] }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+      required: [id, purchaseId, serviceDate, serviceCenter, description, expense, currency, status, receiptDocumentId, createdAt, updatedAt]
+    ServiceRecordInput:
+      type: object
+      properties:
+        serviceDate: { type: string, pattern: "^\\d{4}-\\d{2}-\\d{2}$" }
+        serviceCenter: { type: string, minLength: 1, maxLength: 160 }
+        description: { type: string, minLength: 1, maxLength: 2000 }
+        expense: { type: number, minimum: 0, maximum: 100000000 }
+        currency: { type: string, minLength: 3, maxLength: 3, default: USD }
+        status: { type: string, enum: [reported, scheduled, completed, cancelled], default: reported }
+        receiptDocumentId: { type: ["string", "null"] }
+      required: [serviceDate, serviceCenter, description, expense]
+    ServiceRecordUpdate:
+      allOf:
+        - $ref: "#/components/schemas/ServiceRecordInput"
+    Notification:
+      type: object
+      properties:
+        id: { type: string }
+        purchaseId: { type: string }
+        type: { type: string, enum: [warranty_expiring, return_deadline_approaching, return_deadline_passed] }
+        message: { type: string }
+        scheduledFor: { type: string, pattern: "^\\d{4}-\\d{2}-\\d{2}$" }
+        readAt: { type: ["string", "null"] }
+        createdAt: { type: string }
+      required: [id, purchaseId, type, message, scheduledFor, readAt, createdAt]
 

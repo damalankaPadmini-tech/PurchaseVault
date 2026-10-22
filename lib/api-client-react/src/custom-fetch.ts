@@ -1,3 +1,5 @@
+import axios, { type AxiosResponseHeaders, type RawAxiosResponseHeaders } from "axios";
+
 export type CustomFetchOptions = RequestInit & {
   responseType?: "json" | "text" | "blob" | "auto";
 };
@@ -17,6 +19,12 @@ const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
 
 let _baseUrl: string | null = null;
 let _authTokenGetter: AuthTokenGetter | null = null;
+const API_BASE_URL = "/api";
+const axiosClient = axios.create({
+  baseURL: API_BASE_URL,
+  withCredentials: true,
+  timeout: 20_000,
+});
 
 /**
  * Set a base URL that is prepended to every relative request URL
@@ -358,14 +366,68 @@ export async function customFetch<T = unknown>(
     }
   }
 
-  const requestInfo = { method, url: resolveUrl(input) };
-
-  const response = await fetch(input, { ...init, method, headers });
-
-  if (!response.ok) {
-    const errorData = await parseErrorBody(response, method);
-    throw new ApiError(response, errorData, requestInfo);
+  let url = resolveUrl(input);
+  if (_baseUrl) {
+    url = resolveUrl(applyBaseUrl(input));
+  } else if (url === API_BASE_URL) {
+    url = "/";
+  } else if (url.startsWith(`${API_BASE_URL}/`)) {
+    url = url.slice(API_BASE_URL.length);
   }
 
-  return (await parseSuccessBody(response, responseType, requestInfo)) as T;
+  const requestInfo = { method, url };
+  const requestHeaders = Object.fromEntries(headers.entries());
+  const axiosHeaders: RawAxiosResponseHeaders | AxiosResponseHeaders =
+    requestHeaders;
+  const response = await axiosClient.request<string | Blob>({
+    url,
+    method,
+    headers: axiosHeaders,
+    data: init.body,
+    responseType: responseType === "blob" ? "blob" : "text",
+    signal: init.signal ?? undefined,
+    withCredentials: true,
+    validateStatus: () => true,
+    transformResponse: [(data: unknown) => data],
+  });
+
+  const responseHeaders = new Headers();
+  const responseHeaderRecord = response.headers as unknown as Record<
+    string,
+    unknown
+  >;
+  const toJson = responseHeaderRecord["toJSON"];
+  const normalizedResponseHeaders =
+    typeof toJson === "function"
+      ? (toJson as () => Record<string, unknown>).call(response.headers)
+      : responseHeaderRecord;
+  for (const [name, value] of Object.entries(normalizedResponseHeaders)) {
+    if (name.toLowerCase() === "set-cookie" || value == null) continue;
+    responseHeaders.set(
+      name,
+      Array.isArray(value) ? value.join(", ") : String(value),
+    );
+  }
+  const responseBody =
+    response.status === 204 ||
+    response.status === 205 ||
+    response.status === 304
+      ? null
+      : response.data;
+  const fetchResponse = new Response(responseBody, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: responseHeaders,
+  });
+
+  if (!fetchResponse.ok) {
+    const errorData = await parseErrorBody(fetchResponse, method);
+    throw new ApiError(fetchResponse, errorData, requestInfo);
+  }
+
+  return (await parseSuccessBody(
+    fetchResponse,
+    responseType,
+    requestInfo,
+  )) as T;
 }

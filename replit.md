@@ -6,22 +6,24 @@ PurchaseVault keeps purchase details, warranty timelines, and return deadlines o
 
 - Run the `artifacts/purchase-vault: web` workflow to open the app preview.
 - `pnpm --filter @workspace/purchase-vault run typecheck` — check the app package.
-- `PORT=5174 BASE_PATH=/ pnpm --filter @workspace/purchase-vault run build` — build the web app.
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
+- `PORT=5000 BASE_PATH=/purchase-vault/ pnpm --filter @workspace/purchase-vault run build` — build the web app.
+- Run the `artifacts/api-server: API Server` workflow for the API (port 5000).
+- `pnpm --filter @workspace/api-server run test:unit` — run date and warranty calculation tests.
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- Required Replit Secrets: `MONGODB_URI`, `JWT_SECRET`
+- Optional environment: `JWT_EXPIRES_IN`, `FRONTEND_URL`
 
 ## Stack
 
 - pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
-- DB: PostgreSQL + Drizzle ORM
-- Validation: Zod (`zod/v4`), `drizzle-zod`
+- API: Express 5 with JavaScript ES modules for domain routes and services
+- DB: MongoDB Atlas + Mongoose
+- Authentication: bcryptjs password hashes and JWTs in HttpOnly cookies
+- Validation: OpenAPI-generated Zod schemas
 - API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
+- Build: esbuild (ESM bundle)
 
 ## Where things live
 
@@ -29,13 +31,15 @@ _Populate as you build — short repo map plus pointers to the source-of-truth f
 
 ## Architecture decisions
 
-- The first milestone is frontend-only: purchase records persist in browser `localStorage`; no account sync or server storage is active.
-- Keep backend, authentication, uploads, OCR, and notifications deferred until the user moves beyond the first milestone.
-- Use JavaScript/JSX for the PurchaseVault frontend, as requested; keep the code approachable for a beginner.
+- Purchase records and account data are stored in MongoDB and scoped to the signed-in user.
+- Legacy browser-local purchases remain as an optional, user-confirmed import source; they are not silently uploaded or deleted.
+- Documents currently store metadata only. File-byte uploads, OCR, manufacturer verification, and email/push delivery are not implemented.
+- Warranty and return reminders are generated idempotently when the in-app notification list is requested; there is no background scheduler.
+- Use JavaScript/JSX for the PurchaseVault frontend and JavaScript ES modules for new API domain code; keep the code approachable for a beginner.
 
 ## Product
 
-Users can add, edit, search, filter, view, and delete purchase records; track calculated warranty and return-window dates; and prepare for a warranty conversation using the details they saved. Sample data is provided for the initial experience.
+Users can create an account, add, edit, search, filter, view, and delete their own purchase records; track calculated warranty and return-window dates; and prepare for a warranty conversation using saved details. The browser-local import is explicit and leaves its source unchanged.
 
 ## User preferences
 
