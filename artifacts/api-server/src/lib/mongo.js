@@ -1,6 +1,43 @@
 import mongoose from "mongoose";
 import { logger } from "./logger.js";
 
+function inspectMongoFailure(error) {
+  const pending = [error];
+  const seen = new Set();
+  const names = new Set();
+  const codes = new Set();
+  const messages = [];
+
+  while (pending.length && seen.size < 40) {
+    const current = pending.shift();
+    if (!current || typeof current !== "object" || seen.has(current)) continue;
+    seen.add(current);
+
+    if (typeof current.name === "string") names.add(current.name);
+    if (typeof current.code === "string" || typeof current.code === "number") {
+      codes.add(String(current.code));
+    }
+    if (typeof current.codeName === "string") names.add(current.codeName);
+    if (typeof current.message === "string") messages.push(current.message.toLowerCase());
+
+    for (const key of ["cause", "reason", "error"]) {
+      if (current[key] && typeof current[key] === "object") {
+        pending.push(current[key]);
+      }
+    }
+    if (current.reason?.servers instanceof Map) {
+      pending.push(...current.reason.servers.values());
+    }
+    if (Array.isArray(current.errors)) pending.push(...current.errors);
+  }
+
+  return {
+    names: [...names].filter((value) => /^[A-Za-z0-9_]{1,64}$/.test(value)),
+    codes: [...codes].filter((value) => /^[A-Za-z0-9_]{1,32}$/.test(value)),
+    message: messages.join(" "),
+  };
+}
+
 export async function connectMongo() {
   const uri = process.env.MONGODB_URI;
   if (!uri) {
@@ -20,25 +57,36 @@ export async function connectMongo() {
     );
     logger.info({ database: mongoose.connection.name }, "MongoDB connection ready");
   } catch (error) {
-    const safeMessage =
-      error instanceof Error ? error.message.toLowerCase() : "";
-    const errorCode =
-      typeof error === "object" && error && "code" in error
-        ? String(error.code)
-        : undefined;
-    const category = safeMessage.includes("authentication failed")
+    const diagnostic = inspectMongoFailure(error);
+    const category = diagnostic.codes.some((code) => ["18", "8000"].includes(code)) ||
+      /authentication failed|bad auth|auth failed/.test(diagnostic.message)
       ? "authentication"
-      : safeMessage.includes("querysrv") || errorCode === "ENOTFOUND"
+      : diagnostic.codes.some((code) =>
+          ["ENOTFOUND", "ESERVFAIL", "EBADNAME", "ENODATA"].includes(code),
+        ) || diagnostic.message.includes("querysrv")
         ? "dns"
-        : errorCode === "ECONNREFUSED" || safeMessage.includes("server selection")
+        : diagnostic.codes.some((code) =>
+            [
+              "ECONNREFUSED",
+              "ETIMEDOUT",
+              "EHOSTUNREACH",
+              "ENETUNREACH",
+              "ECONNRESET",
+              "ESOCKETTIMEDOUT",
+            ].includes(code),
+          ) || diagnostic.names.includes("MongooseServerSelectionError")
           ? "network_or_allowlist"
-          : safeMessage.includes("index")
+          : diagnostic.message.includes("index")
             ? "index_initialization"
             : "unknown";
     logger.error(
       {
-        errorName: error instanceof Error ? error.name : "UnknownError",
-        errorCode,
+        errorName:
+          typeof error === "object" && error && "name" in error
+            ? String(error.name)
+            : "UnknownError",
+        nestedErrorNames: diagnostic.names,
+        nestedErrorCodes: diagnostic.codes,
         category,
       },
       "MongoDB initialization failed",
