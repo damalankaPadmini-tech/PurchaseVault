@@ -1,6 +1,13 @@
 import mongoose from "mongoose";
 import { logger } from "./logger.js";
 
+mongoose.set("bufferCommands", false);
+let databaseInitialized = false;
+
+export function isMongoReady() {
+  return databaseInitialized && mongoose.connection.readyState === 1;
+}
+
 function inspectMongoFailure(error) {
   const pending = [error];
   const seen = new Set();
@@ -47,6 +54,7 @@ export async function connectMongo() {
     throw new Error("JWT_SECRET must be configured as a strong Replit Secret.");
   }
 
+  databaseInitialized = false;
   try {
     await mongoose.connect(uri, {
       serverSelectionTimeoutMS: 12_000,
@@ -55,8 +63,13 @@ export async function connectMongo() {
     await Promise.all(
       Object.values(mongoose.models).map((model) => model.createIndexes()),
     );
+    databaseInitialized = true;
     logger.info({ database: mongoose.connection.name }, "MongoDB connection ready");
   } catch (error) {
+    databaseInitialized = false;
+    if (mongoose.connection.readyState === 1) {
+      await mongoose.disconnect().catch(() => {});
+    }
     const diagnostic = inspectMongoFailure(error);
     const category = diagnostic.codes.some((code) => ["18", "8000"].includes(code)) ||
       /authentication failed|bad auth|auth failed/.test(diagnostic.message)

@@ -1,11 +1,11 @@
 import { Router, type IRouter } from "express";
 import { HealthCheckResponse } from "@workspace/api-zod";
-import { mongoose } from "../lib/mongo.js";
+import { isMongoReady } from "../lib/mongo.js";
 
 const router: IRouter = Router();
 
 router.get("/healthz", (_req, res) => {
-  const connected = mongoose.connection.readyState === 1;
+  const connected = isMongoReady();
   const data = HealthCheckResponse.parse({
     status: connected ? "ok" : "unavailable",
   });
